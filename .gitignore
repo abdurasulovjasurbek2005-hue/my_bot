@@ -1,0 +1,23 @@
+# Virtual muhit papkalarini GitHub-ga yuklamaslik uchun
+venv/
+env/
+ENV/
+.venv/
+
+# Python kesh fayllari
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Bot yuklab olgan musiqalar server fayllariga aralashmasligi uchun
+downloads/
+
+# Maxfiy ma'lumotlar yoki konfiguratsiya fayllari (agar ishlatsangiz)
+.env
+.local
+
+# Tizim fayllari (Windows yoki Mac uchun)
+Thumbs.db
+.DS_Store
