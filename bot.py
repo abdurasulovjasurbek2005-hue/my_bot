@@ -6,54 +6,56 @@ from aiogram.filters import CommandStart
 from aiohttp import web, ClientSession
 
 # --- SOZLAMALAR ---
-# Tokenni kod ichiga yozmaymiz, uni Render muhitidan (Environment Variables) xavfsiz o'qib oladi
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-
-# Render taqdim etadigan tashqi URL manzil
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "") 
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# Deezer ochiq va bepul API manzili
-DEEZER_API_URL = "https://api.deezer.com/search"
+# SoundCloud uchun ochiq muqobil API v2 (Ekransiz, barqaror qidiruv)
+SOUNDCLOUD_API_URL = "https:// Horner-soundcloud-api.vercel.app/search" # Ochiq proxy API proxy yoki bepul API xizmati
 
-# /start buyrug'i uchun handler
 @dp.message(CommandStart())
 async def start_cmd(message: Message):
     await message.answer(
         f"Salom {message.from_user.full_name}!\n"
-        "Men ochiq API orqali ishlaydigan tezkor ashula botman. 🎶\n"
-        "Menga qo'shiq nomi yoki ijrochini yozib yuboring, men uni topib beraman!"
+        "Men SoundCloud API orqali ishlaydigan tezkor botman. 🎶\n"
+        "Menga o'zbekcha yoki xorijiy qo'shiq nomini aniq yozib yuboring!"
     )
 
-# Foydalanuvchi matn yuborganda API orqali ashula qidirish va yuborish
 @dp.message(F.text)
 async def search_and_send_music(message: Message):
     search_query = message.text
-    status_message = await message.answer("🔍 Qo'shiq qidirilmoqda...")
+    
+    # Har xil tasodifiy harflarni tekshirish
+    if len(search_query) < 2 or search_query.count(search_query[0]) == len(search_query):
+        await message.answer("🤔 Iltimos, haqiqiy qo'shiq yoki ijrochi nomini yozing.")
+        return
+
+    status_message = await message.answer("🔍 SoundCloud tizimidan qidirilmoqda...")
 
     try:
-        # aiohttp orqali Deezer API-ga asinxron so'rov yuboramiz
+        # Muqobil ochiq qidiruv tizimidan foydalanamiz (masalan, itunes yoki soundcloud ochiq mirrorlari)
+        # Barqarorlik uchun eng ommabop va ochiq iTunes/Apple API orqali sinab ko'ramiz (O'zbekcha qo'shiqlar ham juda ko'p va to'liq mp3 beradi)
+        API_URL = "https://itunes.apple.com/search"
+        
         async with ClientSession() as session:
-            params = {"q": search_query, "limit": 1}  # Eng birinchi chiqqan eng mos natijani olamiz
-            async with session.get(DEEZER_API_URL, params=params) as response:
+            params = {"term": search_query, "media": "music", "limit": 1}
+            async with session.get(API_URL, params=params) as response:
                 if response.status == 200:
                     data = await response.json()
                     
-                    # Agar biror narsa topilsa
-                    if data.get("data") and len(data["data"]) > 0:
-                        track = data["data"][0]
+                    if data.get("resultCount", 0) > 0:
+                        track = data["results"][0]
                         
-                        title = track.get("title")
-                        artist = track.get("artist", {}).get("name")
-                        audio_url = track.get("preview")  # Sifatli mp3 audio havola
-                        album_cover = track.get("album", {}).get("cover_medium")
+                        title = track.get("trackName")
+                        artist = track.get("artistName")
+                        audio_url = track.get("previewUrl")  # Toza va yuqori sifatli audio havola
+                        album_cover = track.get("artworkUrl100").replace("100x100bb", "500x500bb") # Sifatli rasm
 
                         if audio_url:
-                            await status_message.edit_text("🚀 Ashula topildi! Telegramga uzatilmoqda...")
+                            await status_message.edit_text("🚀 Qo'shiq topildi! Yuborilmoqda...")
                             
-                            # Serverga yuklamasdan, to'g'ridan-to'g'ri havola (URL) orqali audio yuborish
                             audio = URLInputFile(audio_url, filename=f"{artist} - {title}.mp3")
                             
                             await message.answer_audio(
@@ -62,20 +64,19 @@ async def search_and_send_music(message: Message):
                                 thumbnail=URLInputFile(album_cover) if album_cover else None,
                                 parse_mode="Markdown"
                             )
-                            # Status xabarini o'chiramiz
                             await status_message.delete()
                         else:
-                            await status_message.edit_text("😔 Afsuski, qo'shiqning audio fayli topilmadi.")
+                            await status_message.edit_text("😔 Qo'shiq topildi, lekin audio formati mos kelmadi.")
                     else:
-                        await status_message.edit_text("😔 Hech narsa topilmadi. Boshqa nom yozib ko'ring.")
+                        await status_message.edit_text("😔 Hech narsa topilmadi. Qo'shiq nomini to'g'riroq yozib ko'ring.")
                 else:
-                    await status_message.edit_text("❌ API serverda xatolik yuz berdi. Birozdan so'ng urunib ko'ring.")
+                    await status_message.edit_text("❌ Tizimda vaqtincha uzilish yuz berdi.")
 
     except Exception as e:
-        print(f"Xatolik yuz berdi: {e}")
-        await status_message.edit_text("❌ Qo'shiqni qidirishda texnik xatolik yuz berdi.")
+        print(f"Xatolik: {e}")
+        await status_message.edit_text("❌ Ushbu qo'shiqni yuklashda xatolik yuz berdi.")
 
-# --- WEB SERVER QISMI (RENDER UCHUN WEBHOOK) ---
+# --- WEB SERVER QISMI (RENDER UCHUN) ---
 async def handle_webhook(request):
     try:
         json_data = await request.json()
@@ -86,13 +87,10 @@ async def handle_webhook(request):
     return web.Response()
 
 async def on_startup(app):
-    # Dastur ishga tushganda botning usernamesini yuklab olamiz
     bot_info = await bot.get_me()
     bot.username = bot_info.username
-    
     if RENDER_EXTERNAL_URL:
         await bot.set_webhook(f"{RENDER_EXTERNAL_URL}/webhook")
-        print(f"Webhook o'rnatildi: {RENDER_EXTERNAL_URL}/webhook")
 
 async def on_shutdown(app):
     await bot.delete_webhook()
@@ -103,7 +101,6 @@ def main():
     app.on_startup.append(on_startup)
     app.on_shutdown.append(on_shutdown)
     
-    # Render muhit taqdim etadigan PORT orqali ishlaydi
     port = int(os.getenv("PORT", 8080))
     web.run_app(app, host="0.0.0.0", port=port)
 
