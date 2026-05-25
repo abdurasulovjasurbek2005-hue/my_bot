@@ -7,10 +7,10 @@ from yt_dlp import YoutubeDL
 from aiohttp import web
 
 # --- SOZLAMALAR ---
-BOT_TOKEN = "8936241092:AAHL4PnXKmWP6ARJUoR6MmxDunO7dlOsgyY"
+# Tokenni kod ichiga yozmaymiz, uni Render muhitidan (Environment Variables) xavfsiz o'qiydi
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# Render sizga taqdim etadigan URL (Buni Render guruhida olasiz, pastda tushuntirilgan)
-# Masalan: https://ashula-bot.onrender.com
+# Render taqdim etadigan URL avtomatik olinadi
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "") 
 
 bot = Bot(token=BOT_TOKEN)
@@ -83,7 +83,6 @@ def main():
     app.on_startup.append(on_startup)
     app.on_shutdown.append(on_shutdown)
     
-    # Render avtomatik beradigan PORT da ishga tushadi
     port = int(os.getenv("PORT", 8080))
     web.run_app(app, host="0.0.0.0", port=port)
 
